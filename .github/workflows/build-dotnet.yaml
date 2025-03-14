@@ -1,0 +1,83 @@
+name: Build .NET
+
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        required: true
+        type: string
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure NOTICE file exists and contains valid copyright
+        run: |
+          if (!(Test-Path -Path "NOTICE")) {
+            Write-Host "ERROR: NOTICE file is missing!"
+            exit 1
+          }
+          $content = Get-Content -Path "NOTICE" -Raw
+          if ($content -notmatch "Copyright \d{4} Rebels Software") {
+            Write-Host "ERROR: NOTICE file does not contain valid copyright statement!"
+            exit 1
+          }
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v1
+        with:
+          nuget-version: "5.x"
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build -c Release --no-restore
+
+      - name: Test
+        run: dotnet test -c Release --no-restore --verbosity normal --collect:"XPlat Code Coverage"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODE_COV_TOKEN }}
+
+      - name: Get version from csproj and apply build number if pre-release
+        id: version
+        run: |
+          $csproj = Get-ChildItem -Path . -Filter *.csproj -Recurse | Select-Object -First 1
+          if (-not $csproj) { Write-Host "Brak pliku .csproj!"; exit 1 }
+          [xml]$proj = Get-Content $csproj.FullName
+          $version = $proj.Project.PropertyGroup.Version
+          if ($version -match "(rc|alpha|beta)") {
+            $buildNumber = $env:GITHUB_RUN_NUMBER
+            $version = "$version.$buildNumber"
+          }
+          echo "PACKAGE_VERSION=$version" >> $env:GITHUB_ENV
+          Write-Host "Final Package version: $version"
+
+      - name: Create git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag v${{ env.PACKAGE_VERSION }}
+          git push origin v${{ env.PACKAGE_VERSION }}
+
+      - name: Conditional Packing (nuspec or csproj)
+        run: |
+          if (Test-Path -Path "*.nuspec") {
+            Write-Host "Packing using .nuspec file..."
+            nuget pack (Get-ChildItem -Path "*.nuspec") -OutputDirectory artifacts -NoDefaultExcludes -Version ${{ env.PACKAGE_VERSION }}
+          } else {
+            Write-Host "Packing using .csproj file..."
+            dotnet pack -c Release --no-build --output artifacts
+          }
