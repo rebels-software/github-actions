@@ -4,8 +4,9 @@ on:
   workflow_call:
     inputs:
       dotnet-version:
-        required: true
+        required: false
         type: string
+        default: "8.0.x"
 
 jobs:
   build-and-test:
@@ -55,13 +56,26 @@ jobs:
         id: version
         run: |
           $csproj = Get-ChildItem -Path . -Filter *.csproj -Recurse | Select-Object -First 1
-          if (-not $csproj) { Write-Host "Brak pliku .csproj!"; exit 1 }
+          
+          if (-not $csproj)
+          {
+            Write-Host "ERROR: No .csproj file found!";
+            exit 1
+          }
+          
           [xml]$proj = Get-Content $csproj.FullName
-          $version = $proj.Project.PropertyGroup.Version
+          $version = $proj.Project.PropertyGroup.Version          
+          if (-not $version)
+          { 
+            Write-Host "ERROR: No Version property found in .csproj file!"; 
+            exit 1
+          }
+          
           if ($version -match "(rc|alpha|beta)") {
             $buildNumber = $env:GITHUB_RUN_NUMBER
             $version = "$version.$buildNumber"
           }
+
           echo "PACKAGE_VERSION=$version" >> $env:GITHUB_ENV
           Write-Host "Final Package version: $version"
 
@@ -72,12 +86,7 @@ jobs:
           git tag v${{ env.PACKAGE_VERSION }}
           git push origin v${{ env.PACKAGE_VERSION }}
 
-      - name: Conditional Packing (nuspec or csproj)
+      - name: Pack .NET code into package
         run: |
-          if (Test-Path -Path "*.nuspec") {
-            Write-Host "Packing using .nuspec file..."
-            nuget pack (Get-ChildItem -Path "*.nuspec") -OutputDirectory artifacts -NoDefaultExcludes -Version ${{ env.PACKAGE_VERSION }}
-          } else {
             Write-Host "Packing using .csproj file..."
-            dotnet pack -c Release --no-build --output artifacts
-          }
+            dotnet pack -c Release --no-build --output artifacts -p:PackageVersion=${{ env.PACKAGE_VERSION }}
