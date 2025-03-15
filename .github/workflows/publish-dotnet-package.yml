@@ -1,0 +1,30 @@
+name: Publish .NET package
+
+on:
+  workflow_call:
+    inputs:
+      package-source:
+        required: false
+        type: string
+        default: "https://api.nuget.org/v3/index.json"
+    secrets:
+      CODE_COV_TOKENNUGET_API_KEY:
+        required: true
+
+jobs:
+  publish:
+    name: Publish to NuGet
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download NuGet package artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: nuget-package
+          path: artifacts
+
+      - name: Publish to NuGet
+        run: nuget push artifacts\*.nupkg -ApiKey ${{ secrets.NUGET_API_KEY }} -Source ${{ input.package-source }} -SkipDuplicate

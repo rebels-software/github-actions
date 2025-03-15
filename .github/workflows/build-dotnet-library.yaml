@@ -13,6 +13,7 @@ on:
 
 jobs:
   build-and-test:
+    name: Build, test and pack .NET library
     runs-on: windows-latest
 
     steps:
@@ -44,10 +45,10 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
-      - name: Build
+      - name: Build .NET project
         run: dotnet build -c Release --no-restore
 
-      - name: Test
+      - name: Run tests
         run: dotnet test -c Release --no-restore --verbosity normal --collect:"XPlat Code Coverage"
 
       - name: Upload coverage to Codecov
@@ -55,7 +56,7 @@ jobs:
         with:
           token: ${{ secrets.CODE_COV_TOKEN }}
 
-      - name: Get version from csproj and apply build number if pre-release
+      - name: Get version from *.csproj file and apply build number if pre-release
         id: version
         run: |
           $csproj = Get-ChildItem -Path . -Filter *.csproj -Recurse | Select-Object -First 1
@@ -93,3 +94,9 @@ jobs:
         run: |
             Write-Host "Packing using .csproj file..."
             dotnet pack -c Release --no-build --output artifacts -p:PackageVersion=${{ env.PACKAGE_VERSION }}
+
+      - name: Upload package Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: nuget-package
+          path: artifacts/*.nupkg
