@@ -27,4 +27,4 @@ jobs:
           path: artifacts
 
       - name: Publish to NuGet
-        run: nuget push artifacts\*.nupkg -ApiKey ${{ secrets.NUGET_API_KEY }} -Source ${{ input.package-source }} -SkipDuplicate
+        run: nuget push artifacts\*.nupkg -ApiKey ${{ secrets.NUGET_API_KEY }} -Source ${{ inputs.package-source }} -SkipDuplicate
