@@ -8,7 +8,7 @@ on:
         type: string
         default: "https://api.nuget.org/v3/index.json"
     secrets:
-      CODE_COV_TOKENNUGET_API_KEY:
+      NUGET_API_KEY:
         required: true
 
 jobs:
