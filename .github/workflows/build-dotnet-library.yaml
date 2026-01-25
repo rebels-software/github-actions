@@ -47,7 +47,7 @@ jobs:
           nuget-version: "5.x"
 
       - name: Restore dependencies
-        run: dotnet restore ${{ inputs.csproj-path }}
+        run: dotnet restore
 
       - name: Build .NET project
         run: dotnet build ${{ inputs.csproj-path }} -c Release --no-restore
