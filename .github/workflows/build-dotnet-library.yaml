@@ -6,7 +6,11 @@ on:
       dotnet-version:
         required: false
         type: string
-        default: "8.0.x"
+        default: "9.0.x"
+      csproj-path:
+        required: true
+        type: string
+        description: "Path to the .csproj file to build"
     secrets:
       CODE_COV_TOKEN:
         required: true
@@ -43,10 +47,10 @@ jobs:
           nuget-version: "5.x"
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore ${{ inputs.csproj-path }}
 
       - name: Build .NET project
-        run: dotnet build -c Release --no-restore
+        run: dotnet build ${{ inputs.csproj-path }} -c Release --no-restore
 
       - name: Run tests
         run: dotnet test -c Release --no-restore --verbosity normal --collect:"XPlat Code Coverage"
@@ -56,18 +60,18 @@ jobs:
         with:
           token: ${{ secrets.CODE_COV_TOKEN }}
 
-      - name: Get version from *.csproj file and apply build number if pre-release
+      - name: Get version from .csproj file and apply build number if pre-release
         id: version
         run: |
-          $csproj = Get-ChildItem -Path . -Filter *.csproj -Recurse | Select-Object -First 1
-          
-          if (-not $csproj)
+          $csprojPath = "${{ inputs.csproj-path }}"
+
+          if (-not (Test-Path $csprojPath))
           {
-            Write-Host "ERROR: No .csproj file found!";
+            Write-Host "ERROR: .csproj file not found at path: $csprojPath";
             exit 1
           }
-          
-          [xml]$proj = Get-Content $csproj.FullName
+
+          [xml]$proj = Get-Content $csprojPath
           $version = $proj.Project.PropertyGroup.Version          
           if (-not $version)
           { 
@@ -92,8 +96,8 @@ jobs:
 
       - name: Pack .NET code into package
         run: |
-            Write-Host "Packing using .csproj file..."
-            dotnet pack -c Release --no-build --output artifacts -p:PackageVersion=${{ env.PACKAGE_VERSION }}
+            Write-Host "Packing ${{ inputs.csproj-path }}..."
+            dotnet pack ${{ inputs.csproj-path }} -c Release --no-build --output artifacts -p:PackageVersion=${{ env.PACKAGE_VERSION }}
 
       - name: Upload package Artifact
         uses: actions/upload-artifact@v4
