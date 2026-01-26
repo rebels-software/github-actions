@@ -1,0 +1,104 @@
+name: Publish NuGet Package
+
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        required: false
+        type: string
+        default: "9.0.x"
+      csproj-path:
+        required: true
+        type: string
+        description: "Path to the .csproj file to publish"
+      package-source:
+        required: false
+        type: string
+        default: "https://api.nuget.org/v3/index.json"
+    secrets:
+      NUGET_API_KEY:
+        required: true
+
+jobs:
+  publish:
+    name: Publish to NuGet
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check if project is a library
+        id: check-library
+        run: |
+          $csprojPath = "${{ inputs.csproj-path }}"
+
+          if (-not (Test-Path $csprojPath))
+          {
+            Write-Host "ERROR: .csproj file not found at path: $csprojPath";
+            exit 1
+          }
+
+          [xml]$proj = Get-Content $csprojPath
+          $outputType = $proj.Project.PropertyGroup.OutputType
+
+          if ($outputType -and $outputType -ne "Library") {
+            Write-Host "Project OutputType is '$outputType', not a Library. Skipping NuGet publish."
+            echo "IS_LIBRARY=false" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "Project is a Library (OutputType: $($outputType ?? 'not specified, defaults to Library'))"
+            echo "IS_LIBRARY=true" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Setup .NET
+        if: steps.check-library.outputs.IS_LIBRARY == 'true'
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Setup NuGet
+        if: steps.check-library.outputs.IS_LIBRARY == 'true'
+        uses: NuGet/setup-nuget@v1
+        with:
+          nuget-version: "5.x"
+
+      - name: Restore dependencies
+        if: steps.check-library.outputs.IS_LIBRARY == 'true'
+        run: dotnet restore
+
+      - name: Build .NET project
+        if: steps.check-library.outputs.IS_LIBRARY == 'true'
+        run: dotnet build ${{ inputs.csproj-path }} -c Release --no-restore
+
+      - name: Get version from .csproj and apply build number if pre-release
+        if: steps.check-library.outputs.IS_LIBRARY == 'true'
+        id: version
+        run: |
+          $csprojPath = "${{ inputs.csproj-path }}"
+
+          [xml]$proj = Get-Content $csprojPath
+          $version = $proj.Project.PropertyGroup.Version
+          if (-not $version)
+          {
+            Write-Host "ERROR: No Version property found in .csproj file!";
+            exit 1
+          }
+
+          if ($version -match "(rc|alpha|beta)") {
+            $buildNumber = $env:GITHUB_RUN_NUMBER
+            $version = "$version.$buildNumber"
+            Write-Host "Pre-release version detected, appending build number"
+          }
+
+          echo "PACKAGE_VERSION=$version" >> $env:GITHUB_ENV
+          Write-Host "Final Package version: $version"
+
+      - name: Pack .NET project
+        if: steps.check-library.outputs.IS_LIBRARY == 'true'
+        run: |
+          Write-Host "Packing ${{ inputs.csproj-path }}..."
+          dotnet pack ${{ inputs.csproj-path }} -c Release --no-build --output artifacts -p:PackageVersion=${{ env.PACKAGE_VERSION }}
+
+      - name: Publish to NuGet
+        if: steps.check-library.outputs.IS_LIBRARY == 'true'
+        run: nuget push artifacts\*.nupkg -ApiKey ${{ secrets.NUGET_API_KEY }} -Source ${{ inputs.package-source }} -SkipDuplicate

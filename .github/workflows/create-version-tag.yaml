@@ -1,0 +1,74 @@
+name: Create Version Tag
+
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        required: false
+        type: string
+        default: "9.0.x"
+      csproj-path:
+        required: true
+        type: string
+        description: "Path to the .csproj file to read version from"
+
+jobs:
+  create-tag:
+    name: Create Version Tag
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Get version from .csproj file
+        id: version
+        run: |
+          $csprojPath = "${{ inputs.csproj-path }}"
+
+          if (-not (Test-Path $csprojPath))
+          {
+            Write-Host "ERROR: .csproj file not found at path: $csprojPath";
+            exit 1
+          }
+
+          [xml]$proj = Get-Content $csprojPath
+          $version = $proj.Project.PropertyGroup.Version
+          if (-not $version)
+          {
+            Write-Host "ERROR: No Version property found in .csproj file!";
+            exit 1
+          }
+
+          Write-Host "Version from .csproj: $version"
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Check if tag already exists
+        id: check-tag
+        run: |
+          $tagName = "v${{ steps.version.outputs.VERSION }}"
+          $tagExists = git tag -l $tagName
+          if ($tagExists) {
+            Write-Host "Tag $tagName already exists, skipping creation"
+            echo "TAG_EXISTS=true" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "Tag $tagName does not exist, will create"
+            echo "TAG_EXISTS=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Create and push tag
+        if: steps.check-tag.outputs.TAG_EXISTS == 'false'
+        run: |
+          $tagName = "v${{ steps.version.outputs.VERSION }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag $tagName
+          git push origin $tagName
+          Write-Host "Created and pushed tag: $tagName"
