@@ -1,0 +1,56 @@
+name: Build and Test .NET
+
+on:
+  workflow_call:
+    inputs:
+      dotnet-version:
+        required: false
+        type: string
+        default: "9.0.x"
+      csproj-path:
+        required: true
+        type: string
+        description: "Path to the .csproj file to build"
+    secrets:
+      CODE_COV_TOKEN:
+        required: true
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Ensure NOTICE file exists and contains valid copyright
+        run: |
+          if (!(Test-Path -Path "NOTICE")) {
+            Write-Host "ERROR: NOTICE file is missing!"
+            exit 1
+          }
+          $content = Get-Content -Path "NOTICE" -Raw
+          if ($content -notmatch "Copyright \d{4} Rebels Software") {
+            Write-Host "ERROR: NOTICE file does not contain valid copyright statement!"
+            exit 1
+          }
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build .NET project
+        run: dotnet build ${{ inputs.csproj-path }} -c Release --no-restore
+
+      - name: Run tests
+        run: dotnet test -c Release --no-restore --verbosity normal --collect:"XPlat Code Coverage"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODE_COV_TOKEN }}
