@@ -11,6 +11,11 @@ on:
         required: true
         type: string
         description: "Path to the .csproj file to read version from"
+      tag-prefix:
+        required: false
+        type: string
+        default: ""
+        description: "Optional prefix for the tag (e.g. 'my-package' produces 'my-package/v1.0.0')"
 
 jobs:
   create-tag:
@@ -53,7 +58,9 @@ jobs:
       - name: Check if tag already exists
         id: check-tag
         run: |
-          $tagName = "v${{ steps.version.outputs.VERSION }}"
+          $prefix = "${{ inputs.tag-prefix }}"
+          if ($prefix) { $tagName = "$prefix/v${{ steps.version.outputs.VERSION }}" }
+          else { $tagName = "v${{ steps.version.outputs.VERSION }}" }
           $tagExists = git tag -l $tagName
           if ($tagExists) {
             Write-Host "Tag $tagName already exists, skipping creation"
@@ -66,7 +73,9 @@ jobs:
       - name: Create and push tag
         if: steps.check-tag.outputs.TAG_EXISTS == 'false'
         run: |
-          $tagName = "v${{ steps.version.outputs.VERSION }}"
+          $prefix = "${{ inputs.tag-prefix }}"
+          if ($prefix) { $tagName = "$prefix/v${{ steps.version.outputs.VERSION }}" }
+          else { $tagName = "v${{ steps.version.outputs.VERSION }}" }
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag $tagName
