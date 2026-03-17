@@ -37,7 +37,7 @@ jobs:
           }
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ inputs.dotnet-version }}
 
@@ -51,6 +51,7 @@ jobs:
         run: dotnet test -c Release --no-restore --verbosity normal --collect:"XPlat Code Coverage"
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODE_COV_TOKEN }}
+          fail_ci_if_error: false
