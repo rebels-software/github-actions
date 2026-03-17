@@ -50,10 +50,17 @@ jobs:
       - name: Run tests
         run: dotnet test -c Release --no-restore --verbosity normal --collect:"XPlat Code Coverage"
 
+      - name: Find coverage files
+        id: coverage
+        run: |
+          $files = Get-ChildItem -Recurse -Filter "coverage.cobertura.xml" | Select-Object -ExpandProperty FullName
+          $joined = $files -join ","
+          Write-Host "Found coverage files: $joined"
+          echo "FILES=$joined" >> $env:GITHUB_OUTPUT
+
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODE_COV_TOKEN }}
           fail_ci_if_error: false
-          directory: .
-          files: '**/TestResults/**/coverage.cobertura.xml'
+          files: ${{ steps.coverage.outputs.FILES }}
