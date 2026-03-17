@@ -52,6 +52,7 @@ jobs:
             exit 1
           }
 
+          $version = $version.Trim()
           Write-Host "Version from .csproj: $version"
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
 
